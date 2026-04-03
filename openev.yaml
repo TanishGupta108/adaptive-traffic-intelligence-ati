@@ -1,0 +1,20 @@
+name: adaptive-traffic-intelligence
+version: "1.0"
+
+environment:
+  file: traffic_env.py
+  class: TrafficEnv
+
+entrypoint: inference.py
+
+tasks:
+  - name: baseline_ns
+    entry: tasks.task1:run_task
+  - name: baseline_ew
+    entry: tasks.task2:run_task
+  - name: smart_policy
+    entry: tasks.task3:run_task
+
+grader:
+  file: tasks/graders.py
+  function: grade
