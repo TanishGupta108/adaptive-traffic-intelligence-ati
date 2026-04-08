@@ -182,8 +182,8 @@ if __name__ == "__main__":
         main()
         print("\n✅ ALL TESTS PASSED")
 
-        # small delay so logs are visible
-        time.sleep(5)
+        # keep container alive for a short time (IMPORTANT)
+        time.sleep(30)
 
     except Exception as e:
         print("❌ Runtime error:", e)
