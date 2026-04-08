@@ -1,3 +1,13 @@
+---
+title: Adaptive Traffic Intelligence
+emoji: 🚦
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_file: inference.py
+pinned: false
+---
+
 # Adaptive Traffic Intelligence (ATI)
 
 A Reinforcement Learning–based smart traffic signal controller with emergency vehicle priority, lane balancing, and real-time state evaluation — deployed on Hugging Face Spaces.
