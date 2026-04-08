@@ -6,7 +6,6 @@ colorTo: green
 sdk: docker
 app_file: inference.py
 pinned: false
-app_port: 7860
 ---
 
 # Adaptive Traffic Intelligence (ATI)
