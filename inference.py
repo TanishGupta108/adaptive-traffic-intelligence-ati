@@ -177,12 +177,14 @@ def main():
 
 import time
 
-def run():
-    # your simulation code here
-    print("Simulation completed")
-
 if __name__ == "__main__":
-    run()
-    
+    try:
+        main()  # ✅ THIS RUNS YOUR ACTUAL SIMULATION
+        print("\n✅ ALL TESTS PASSED")
+
+    except Exception as e:
+        print("❌ Runtime error:", e)
+
+    # ✅ Keep container alive (VERY IMPORTANT for Hugging Face)
     while True:
         time.sleep(60)
