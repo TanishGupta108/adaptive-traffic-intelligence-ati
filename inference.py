@@ -179,12 +179,11 @@ import time
 
 if __name__ == "__main__":
     try:
-        main()  # ✅ THIS RUNS YOUR ACTUAL SIMULATION
+        main()
         print("\n✅ ALL TESTS PASSED")
+
+        # small delay so logs are visible
+        time.sleep(5)
 
     except Exception as e:
         print("❌ Runtime error:", e)
-
-    # ✅ Keep container alive (VERY IMPORTANT for Hugging Face)
-    while True:
-        time.sleep(60)
