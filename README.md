@@ -4,7 +4,7 @@ emoji: 🚦
 colorFrom: blue
 colorTo: green
 sdk: docker
-app_file: inference.py
+app_file: app.py
 pinned: false
 ---
 
