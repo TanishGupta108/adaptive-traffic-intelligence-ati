@@ -175,5 +175,14 @@ def main():
     print(f"{'='*60}")
 
 
+import time
+
+def run():
+    # your simulation code here
+    print("Simulation completed")
+
 if __name__ == "__main__":
-    main()
+    run()
+    
+    while True:
+        time.sleep(60)
