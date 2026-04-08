@@ -7,13 +7,13 @@ class TrafficEnv:
 
     def reset(self):
         # Cars in lanes: [North, South, East, West]
-        self.cars = [random.randint(0, 10) for _ in range(4)]
+        self.cars = [int(random.randint(0, 10)) for _ in range(4)]
         
         # 0 = NS green, 1 = EW green
         self.signal = 0  
 
         # Emergency setup
-        self.emergency_lane = random.choice([0, 1, 2, 3])
+        self.emergency_lane = int(random.choice([0, 1, 2, 3]))
         self.emergency_active = True
 
         self.steps = 0
@@ -22,15 +22,20 @@ class TrafficEnv:
         return self._get_state()
 
     def _get_state(self):
-        return tuple(self.cars + [self.signal, self.emergency_lane, int(self.emergency_active)])
+        # ✅ MUST return list (NOT tuple)
+        return list(self.cars + [
+            int(self.signal),
+            int(self.emergency_lane),
+            int(self.emergency_active)
+        ])
 
     def step(self, action):
-        reward = 0
+        reward = 0.0
         self.steps += 1
         self.time += 1
 
         # Action: 0 = keep NS, 1 = switch to EW
-        if action == 1:
+        if int(action) == 1:
             self.signal = 1 - self.signal
 
         passed = 0
@@ -54,33 +59,33 @@ class TrafficEnv:
             arrival_rate = 1
 
         # Direction bias (more NS traffic)
-        self.cars[0] += random.randint(0, arrival_rate)
-        self.cars[1] += random.randint(0, arrival_rate)
-        self.cars[2] += random.randint(0, max(1, arrival_rate - 1))
-        self.cars[3] += random.randint(0, max(1, arrival_rate - 1))
+        self.cars[0] += int(random.randint(0, arrival_rate))
+        self.cars[1] += int(random.randint(0, arrival_rate))
+        self.cars[2] += int(random.randint(0, max(1, arrival_rate - 1)))
+        self.cars[3] += int(random.randint(0, max(1, arrival_rate - 1)))
 
         # 🚑 Emergency handling
         if self.emergency_active:
             if self.cars[self.emergency_lane] == 0:
                 self.emergency_active = False
 
-        if not self.emergency_active and random.random() < 0.1:
-            self.emergency_lane = random.choice([0, 1, 2, 3])
+        if (not self.emergency_active) and random.random() < 0.1:
+            self.emergency_lane = int(random.choice([0, 1, 2, 3]))
             self.emergency_active = True
 
         # 🎯 Reward system
-        reward -= sum(self.cars)              # congestion penalty
-        reward += passed * 2                 # smooth flow reward
+        reward -= float(sum(self.cars))     # congestion penalty
+        reward += float(passed * 2)         # flow reward
 
         # Emergency priority reward
         if self.emergency_active:
             if (self.signal == 0 and self.emergency_lane in [0, 1]) or \
                (self.signal == 1 and self.emergency_lane in [2, 3]):
-                reward += 15
+                reward += 15.0
             else:
-                reward -= 25
+                reward -= 25.0
 
-        done = self.steps >= self.max_steps
+        done = bool(self.steps >= self.max_steps)
 
-        return self._get_state(), reward, done
-    
+        # ✅ MUST return (list, float, bool)
+        return self._get_state(), float(reward), done

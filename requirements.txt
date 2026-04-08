@@ -1,3 +1,6 @@
+fastapi
+uvicorn
+pydantic
+numpy
 openenv-core
 huggingface_hub
-numpy
