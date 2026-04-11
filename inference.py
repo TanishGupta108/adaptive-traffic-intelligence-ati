@@ -1,17 +1,30 @@
+import pickle
+import numpy as np
 import random
 from traffic_env import TrafficEnv
 
-# Monte-Carlo lookahead parameters
-_MC_SAMPLES = 20
-_MC_DEPTH = 6
+# ==============================
+# LOAD Q-TABLE (LEARNING BRAIN)
+# ==============================
+try:
+    with open("q_table.pkl", "rb") as f:
+        q_table = pickle.load(f)
+    print("✅ Q-table loaded")
+except:
+    q_table = {}
+    print("⚠️ No Q-table found, using fallback logic")
+
+# ==============================
+# MONTE CARLO (YOUR OLD LOGIC)
+# ==============================
+_MC_SAMPLES = 10
+_MC_DEPTH = 5
 _GAMMA = 0.95
 
 
 def _simulate_step(action, signal, cars, time, emergency_active, emergency_lane, rng):
-    """Simulate one env.step-like update using rng for randomness."""
     cars = cars.copy()
 
-    # apply action (1 toggles)
     if action == 1:
         signal = 1 - signal
 
@@ -28,12 +41,10 @@ def _simulate_step(action, signal, cars, time, emergency_active, emergency_lane,
             passed += moved
 
     time += 1
-    # rush hour
+
     arrival_rate = 3 if 10 <= time % 50 <= 30 else 1
-    cars[0] += rng.randint(0, arrival_rate)
-    cars[1] += rng.randint(0, arrival_rate)
-    cars[2] += rng.randint(0, max(1, arrival_rate - 1))
-    cars[3] += rng.randint(0, max(1, arrival_rate - 1))
+    for i in range(4):
+        cars[i] += rng.randint(0, arrival_rate)
 
     if emergency_active and cars[emergency_lane] == 0:
         emergency_active = False
@@ -43,6 +54,7 @@ def _simulate_step(action, signal, cars, time, emergency_active, emergency_lane,
         emergency_active = True
 
     reward = -sum(cars) + 2 * passed
+
     if emergency_active:
         if (signal == 0 and emergency_lane in [0, 1]) or (signal == 1 and emergency_lane in [2, 3]):
             reward += 15
@@ -52,19 +64,15 @@ def _simulate_step(action, signal, cars, time, emergency_active, emergency_lane,
     return reward, signal, cars, time, emergency_active, emergency_lane
 
 
-def choose_action(env):
-    """Monte-Carlo rollout to estimate expected return for keep vs switch.
-
-    Falls back to a simple tie-breaker if estimates are too close.
-    """
-    # emergency: immediate priority
+def monte_carlo_action(env):
     if env.emergency_active:
         desired = 0 if env.emergency_lane in [0, 1] else 1
         return 0 if desired == env.signal else 1
 
-    def rollout(action_first, seed_base):
-        total = 0.0
-        rng = random.Random(seed_base)
+    def rollout(action_first):
+        total = 0
+        rng = random.Random()
+
         for _ in range(_MC_SAMPLES):
             signal = env.signal
             cars = env.cars.copy()
@@ -72,75 +80,61 @@ def choose_action(env):
             emergency_active = env.emergency_active
             emergency_lane = env.emergency_lane
 
-            # apply first action
             reward, signal, cars, time, emergency_active, emergency_lane = _simulate_step(
                 action_first, signal, cars, time, emergency_active, emergency_lane, rng
             )
-            disc = 1.0
-            total_reward = reward * disc
 
-            # subsequent steps use a greedy policy in rollouts
-            for d in range(1, _MC_DEPTH):
-                # choose action greedily for the rollout
-                if emergency_active:
-                    desired = 0 if emergency_lane in [0, 1] else 1
-                    action = 0 if desired == signal else 1
-                else:
-                    ns = cars[0] + cars[1]
-                    ew = cars[2] + cars[3]
-                    desired = 0 if ns >= ew else 1
-                    action = 0 if desired == signal else 1
+            total_reward = reward
+            discount = 1.0
+
+            for _ in range(_MC_DEPTH):
+                action = 0 if sum(cars[:2]) >= sum(cars[2:]) else 1
 
                 reward, signal, cars, time, emergency_active, emergency_lane = _simulate_step(
                     action, signal, cars, time, emergency_active, emergency_lane, rng
                 )
-                disc *= _GAMMA
-                total_reward += reward * disc
+
+                discount *= _GAMMA
+                total_reward += reward * discount
 
             total += total_reward
 
         return total / _MC_SAMPLES
 
-    # seed base with a compact state so rollouts vary predictably
-    seed_base = env.time * 1000 + sum(env.cars) + (1 if env.emergency_active else 0)
-    keep_val = rollout(0, seed_base + 1)
-    switch_val = rollout(1, seed_base + 2)
+    keep = rollout(0)
+    switch = rollout(1)
 
-    # small tie-breaker and safety: if difference small, prefer action that reduces max-lane
-    if abs(switch_val - keep_val) < 1.0:
-        ns = env.cars[0] + env.cars[1]
-        ew = env.cars[2] + env.cars[3]
-        desired = 0 if ns >= ew else 1
-        return 0 if desired == env.signal else 1
-
-    return 1 if switch_val > keep_val else 0
+    return 1 if switch > keep else 0
 
 
+# ==============================
+# FINAL ACTION SELECTOR
+# ==============================
+def get_action(env):
+    state_key = tuple(env.cars + [env.signal, int(env.emergency_active), env.emergency_lane])
+
+    if state_key in q_table:
+        return int(np.argmax(q_table[state_key]))
+    else:
+        return monte_carlo_action(env)
+
+
+# ==============================
+# RUN EPISODE
+# ==============================
 def run_episode(env, max_steps=50):
-    state = env.reset()
-
-    # Reset policy tracking for the episode
-    global _last_signal, _same_count
-    _last_signal = env.signal
-    _same_count = 1
-
+    env.reset()
     total_reward = 0
 
     for step in range(max_steps):
-        action = choose_action(env)
+        action = get_action(env)
 
-        try:
-            state, reward, done = env.step(action)
-        except Exception as e:
-            print("Error during step:", e)
-            break
-
+        state, reward, done = env.step(action)
         total_reward += reward
 
         print(
             f"Step {step+1:2d} | Signal: {'NS' if env.signal==0 else 'EW'} | "
-            f"Cars: {env.cars} | Emergency: {'🚑 lane '+str(env.emergency_lane) if env.emergency_active else '✅ clear'} | "
-            f"Reward: {reward:+.0f} | Total: {total_reward:.0f}"
+            f"Cars: {env.cars} | Reward: {reward:+} | Total: {total_reward}"
         )
 
         if done:
@@ -149,41 +143,20 @@ def run_episode(env, max_steps=50):
     return total_reward
 
 
+# ==============================
+# MAIN
+# ==============================
 def main():
-    print("🚦 Running Adaptive Traffic Intelligence (ATI) — Elite Policy\n")
+    env = TrafficEnv()
 
-    try:
-        env = TrafficEnv()
-    except Exception as e:
-        print("Failed to initialize environment:", e)
-        return
-
-    episodes = 5
-    results = []
-
-    for ep in range(episodes):
-        print(f"\n{'='*60}")
-        print(f"  Episode {ep+1}")
-        print(f"{'='*60}")
+    scores = []
+    for i in range(5):
+        print(f"\nEpisode {i+1}")
         score = run_episode(env)
-        results.append(score)
-        print(f"\n  ✅ Episode {ep+1} Score: {score:.0f}")
+        scores.append(score)
 
-    avg_score = sum(results) / len(results)
-    print(f"\n{'='*60}")
-    print(f"  🏆 Average Score across {episodes} episodes: {avg_score:.1f}")
-    print(f"{'='*60}")
+    print("\nAverage Score:", sum(scores) / len(scores))
 
-
-import time
 
 if __name__ == "__main__":
-    try:
-        main()
-        print("\n✅ ALL TESTS PASSED")
-
-        # keep container alive for a short time (IMPORTANT)
-        time.sleep(60)
-
-    except Exception as e:
-        print("❌ Runtime error:", e)
+    main()
