@@ -175,15 +175,15 @@ def main():
     print(f"{'='*60}")
 
 
-# import time
+import time
 
-# if __name__ == "__main__":
-#     try:
-#         main()
-#         print("\n✅ ALL TESTS PASSED")
+if __name__ == "__main__":
+    try:
+        main()
+        print("\n✅ ALL TESTS PASSED")
 
-#         # keep container alive for a short time (IMPORTANT)
-#         time.sleep(0)
+        # keep container alive for a short time (IMPORTANT)
+        time.sleep(60)
 
-#     except Exception as e:
-#         print("❌ Runtime error:", e)
+    except Exception as e:
+        print("❌ Runtime error:", e)
