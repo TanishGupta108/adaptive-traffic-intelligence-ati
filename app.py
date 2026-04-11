@@ -47,7 +47,8 @@ def step(request: StepRequest):
         "done": bool(done),
         "info": {}
     }
-
+def main():
+    return app
 # Run server
 if __name__ == "__main__":
     import uvicorn
