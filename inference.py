@@ -158,5 +158,5 @@ def main():
     print("\nAverage Score:", sum(scores) / len(scores))
 
 
-if __name__ == "__main__":
-    main()
+# if __name__ == "__main__":
+#     main()
