@@ -1,4 +1,5 @@
+import math
+
 def grade(score):
-    # Normalize score to (0, 1) range — strictly exclusive of 0 and 1
-    normalized = (score + 200) / 400
-    return max(1e-6, min(1 - 1e-6, normalized))
+    # Sigmoid: mathematically impossible to return exactly 0.0 or 1.0
+    return 1.0 / (1.0 + math.exp(-score / 10.0))
