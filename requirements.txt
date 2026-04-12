@@ -4,3 +4,4 @@ pydantic
 numpy
 openenv-core
 huggingface_hub
+openai
