@@ -8,10 +8,7 @@ _GAMMA = 0.95
 
 
 def _simulate_step(action, signal, cars, time, emergency_active, emergency_lane, rng):
-    """Simulate one env.step-like update using rng for randomness."""
     cars = cars.copy()
-
-    # apply action (1 toggles)
     if action == 1:
         signal = 1 - signal
 
@@ -28,7 +25,6 @@ def _simulate_step(action, signal, cars, time, emergency_active, emergency_lane,
             passed += moved
 
     time += 1
-    # rush hour
     arrival_rate = 3 if 10 <= time % 50 <= 30 else 1
     cars[0] += rng.randint(0, arrival_rate)
     cars[1] += rng.randint(0, arrival_rate)
@@ -52,12 +48,17 @@ def _simulate_step(action, signal, cars, time, emergency_active, emergency_lane,
     return reward, signal, cars, time, emergency_active, emergency_lane
 
 
-def choose_action(env):
-    """Monte-Carlo rollout to estimate expected return for keep vs switch.
+def choose_action(env, policy="smart"):
+    """Choose action based on policy type."""
+    if policy == "baseline_ns":
+        # Always keep NS green (action=0 to stay, or switch to NS if EW)
+        return 0 if env.signal == 0 else 1
 
-    Falls back to a simple tie-breaker if estimates are too close.
-    """
-    # emergency: immediate priority
+    if policy == "baseline_ew":
+        # Always keep EW green
+        return 1 if env.signal == 0 else 0
+
+    # Smart (Monte-Carlo) policy
     if env.emergency_active:
         desired = 0 if env.emergency_lane in [0, 1] else 1
         return 0 if desired == env.signal else 1
@@ -72,16 +73,13 @@ def choose_action(env):
             emergency_active = env.emergency_active
             emergency_lane = env.emergency_lane
 
-            # apply first action
             reward, signal, cars, time, emergency_active, emergency_lane = _simulate_step(
                 action_first, signal, cars, time, emergency_active, emergency_lane, rng
             )
             disc = 1.0
             total_reward = reward * disc
 
-            # subsequent steps use a greedy policy in rollouts
             for d in range(1, _MC_DEPTH):
-                # choose action greedily for the rollout
                 if emergency_active:
                     desired = 0 if emergency_lane in [0, 1] else 1
                     action = 0 if desired == signal else 1
@@ -101,12 +99,10 @@ def choose_action(env):
 
         return total / _MC_SAMPLES
 
-    # seed base with a compact state so rollouts vary predictably
     seed_base = env.time * 1000 + sum(env.cars) + (1 if env.emergency_active else 0)
     keep_val = rollout(0, seed_base + 1)
     switch_val = rollout(1, seed_base + 2)
 
-    # small tie-breaker and safety: if difference small, prefer action that reduces max-lane
     if abs(switch_val - keep_val) < 1.0:
         ns = env.cars[0] + env.cars[1]
         ew = env.cars[2] + env.cars[3]
@@ -116,74 +112,52 @@ def choose_action(env):
     return 1 if switch_val > keep_val else 0
 
 
-def run_episode(env, max_steps=50):
-    state = env.reset()
+def run_task(task_name, policy="smart", max_steps=50):
+    """
+    Run one episode for a named task and emit required structured output:
+      [START] task=TASK_NAME
+      [STEP]  step=N reward=R
+      [END]   task=TASK_NAME score=TOTAL steps=N
+    """
+    env = TrafficEnv()
+    env.reset()
 
-    # Reset policy tracking for the episode
-    global _last_signal, _same_count
-    _last_signal = env.signal
-    _same_count = 1
+    print(f"[START] task={task_name}", flush=True)
 
-    total_reward = 0
+    total_reward = 0.0
+    step_num = 0
 
-    for step in range(max_steps):
-        action = choose_action(env)
+    for step_num in range(1, max_steps + 1):
+        action = choose_action(env, policy=policy)
 
         try:
             state, reward, done = env.step(action)
         except Exception as e:
-            print("Error during step:", e)
+            print(f"[STEP] step={step_num} reward=0.0", flush=True)
             break
 
         total_reward += reward
-
-        print(
-            f"Step {step+1:2d} | Signal: {'NS' if env.signal==0 else 'EW'} | "
-            f"Cars: {env.cars} | Emergency: {'🚑 lane '+str(env.emergency_lane) if env.emergency_active else '✅ clear'} | "
-            f"Reward: {reward:+.0f} | Total: {total_reward:.0f}"
-        )
+        print(f"[STEP] step={step_num} reward={reward:.4f}", flush=True)
 
         if done:
             break
+
+    score = round(total_reward / step_num, 4) if step_num > 0 else 0.0
+    print(f"[END] task={task_name} score={score} steps={step_num}", flush=True)
 
     return total_reward
 
 
 def main():
-    print("🚦 Running Adaptive Traffic Intelligence (ATI) — Elite Policy\n")
+    tasks = [
+        ("baseline_ns",  "baseline_ns"),
+        ("baseline_ew",  "baseline_ew"),
+        ("smart_policy", "smart"),
+    ]
 
-    try:
-        env = TrafficEnv()
-    except Exception as e:
-        print("Failed to initialize environment:", e)
-        return
+    for task_name, policy in tasks:
+        run_task(task_name, policy=policy)
 
-    episodes = 5
-    results = []
-
-    for ep in range(episodes):
-        print(f"\n{'='*60}")
-        print(f"  Episode {ep+1}")
-        print(f"{'='*60}")
-        score = run_episode(env)
-        results.append(score)
-        print(f"\n  ✅ Episode {ep+1} Score: {score:.0f}")
-
-    avg_score = sum(results) / len(results)
-    print(f"\n{'='*60}")
-    print(f"  🏆 Average Score across {episodes} episodes: {avg_score:.1f}")
-    print(f"{'='*60}")
-
-
-import time
 
 if __name__ == "__main__":
-    try:
-        main()
-        print("\n✅ ALL TESTS PASSED")
-
-        # keep container alive for a short time (IMPORTANT)
-        time.sleep(60)
-
-    except Exception as e:
-        print("❌ Runtime error:", e)
+    main()
